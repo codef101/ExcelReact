@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
-
+    <script src="https://unpkg.com/prop-types/prop-types.js"></script>
 
     <script type="text/babel">
 
@@ -42,26 +42,68 @@
             ],
         ];
 
+        function clone(o) {
+            return JSON.parse(JSON.stringify(o));
+        }
+
         class Excel extends React.Component {
-            constructor(){
+            constructor(props) {
                 super();
-                this.state = {data: props.initialData}
+                this.state = {
+                    data: props.initialData,
+                    sortby: null,
+                    descending: false,
+                };
+                this.sort = this.sort.bind(this);
+            }
+            sort(e) {
+                console.log('sorting....')
+
+                const column = e.target.cellIndex;
+                const data = clone(this.state.data);
+                const descending = this.state.sortby === column && !this.state.descending;
+
+                data.sort((a, b) => {
+                    console.log('a column', a[column])
+                    console.log('b column', b[column])
+                    if (a[column] === b[column]) {
+                        return 0;
+                    }
+                    return descending
+                        ? a[column] < b[column]
+                            ? 1
+                            : -1
+                        : a[column] > b[column]
+                            ? 1
+                            : -1;
+                });
+
+                this.setState({
+                    data,
+                    sortby: column,
+                    descending,
+                });
             }
             render() {
                 const headers = []
                 return (
                     <table>
                         <thead>
-                            <tr>
-                                {this.props.headers.map((title,key) => <th key={key}>{title}</th>)}
+                            <tr onClick={this.sort}>
+                                {this.props.headers.map((title, idx) => {
+                                    if (this.state.sortby === idx) {
+                                        title += this.state.descending ? ' \u2191' : ' \u2193'
+                                    }
+                                    return <th key={idx}>{title}</th>
+                                })}
                             </tr>
                         </thead>
                         <tbody>
-                            {this.state.data.map((row, idx) => (
+                            {this.state.data.map((row, key) => (
                                 <tr key={key}>
                                     {row.map((cell, idx) => (
                                         <td key={idx}> {cell}</td>
-                                    ) )}
+                                    ))}
                                 </tr>
                             ))}
                         </tbody>
@@ -69,6 +111,12 @@
                 )
             }
         }
+
+        Excel.propTypes = {
+            headers: PropTypes.arrayOf(PropTypes.string),
+            initialData: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.string)),
+        };
+
         class MyPage extends React.Component {
             render() {
                 return (
@@ -82,7 +130,10 @@
 
         window.onload = function () {
             ReactDOM.render(
-                <MyPage />,
+                // <StrictMode>
+                <MyPage />
+                // </StrictMode>
+                ,
                 document.getElementById('root')
             );
         };
