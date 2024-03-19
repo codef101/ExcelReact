@@ -49,15 +49,75 @@
         class Excel extends React.Component {
             constructor(props) {
                 super();
+                const data = clone(props.initialData).map((row, idx) =>
+                    row.concat(idx),
+                );
                 this.state = {
-                    data: props.initialData,
+                    data,
                     sortby: null,
                     descending: false,
-                    edit: null,
+                    edit: null, // {row: index, column: index}
+                    search: false,
                 };
+                this.log = [clone(this.state)];
+                this.replay = this.replay.bind(this);
+                this.replayID = null;
+                this.logSetState = this.logSetState.bind(this);
+                this.preSearchData = null;
                 this.sort = this.sort.bind(this);
                 this.showEditor = this.showEditor.bind(this);
                 this.save = this.save.bind(this);
+                this.toggleSearch = this.toggleSearch.bind(this);
+                this.search = this.search.bind(this);
+                this.keydownHandler = this.keydownHandler.bind(this);
+
+                this.downloadJSON = this.download.bind(this, 'json');
+                this.downloadCSV = this.download.bind(this, 'csv');
+            }
+
+            componentDidMount() {
+                document.addEventListener('keydown', this.keydownHandler);
+            }
+
+            componentDidMount() {
+                document.addEventListener('keydown', this.keydownHandler);
+                clearInterval(this.replayID);
+            }
+
+            replay() {
+                if (this.log.length === 1) {
+                    console.warn('No state changes to replay yet');
+                    return;
+                }
+                let idx = -1;
+                const interval = setInterval(() => {
+                    if (++idx === this.log.length - 1) {
+                        // the end
+                        clearInterval(interval);
+                    }
+                    this.setState(this.log[idx]);
+                }, 1000);
+            }
+            clearInterval(e) {
+                this.replayID = setInterval(() => {
+                    if (++idx === this.log.length - 1) {
+                        // the end
+                        clearInterval(this.replayID);
+                    }
+                    this.setState(this.log[idx]);
+                }, 1000);
+            }
+            keydownHandler(e) {
+                if (e.altKey && e.shiftKey && e.keyCode === 82) {
+                    // ALT+SHIFT+R(eplay)
+                    this.replay();
+                }
+            }
+            logSetState(newState) {
+                // remember the old state in a clone
+                this.log.push(clone(newState));
+                // now set it
+                this.setState(newState);
             }
             sort(e) {
                 console.log('sorting....')
@@ -100,45 +160,123 @@
             save(e) {
                 e.preventDefault();
                 const input = e.target.firstChild;
-                const data = clone(this.state.data);
-                data[this.state.edit.row][this.state.edit.column] = input.value;
-                this.setState({
+                const data = clone(this.state.data).map((row) => {
+                    if (row[row.length - 1] === this.state.edit.row) {
+                        row[this.state.edit.column] = input.value;
+                    }
+                    return row;
+                });
+                this.logSetState({
                     edit: null,
                     data,
                 });
+                if (this.preSearchData) {
+                    this.preSearchData[this.state.edit.row][this.state.edit.column] =
+                        input.value;
+                }
             }
+
+            toggleSearch() {
+                if (this.state.search) {
+                    this.setState({
+                        data: this.preSearchData,
+                        search: false,
+                    });
+                    this.preSearchData = null;
+                } else {
+                    this.preSearchData = this.state.data;
+                    this.setState({
+                        search: true,
+                    });
+                }
+            }
+
+            search(e) {
+                const needle = e.target.value.toLowerCase();
+                if (!needle) {
+                    this.setState({ data: this.preSearchData });
+                    return;
+                }
+                const idx = e.target.dataset.idx;
+                const searchdata = this.preSearchData.filter((row) => {
+                    return row[idx].toString().toLowerCase().indexOf(needle) > -1;
+                });
+                this.setState({ data: searchdata });
+            }
+
+            download(format, ev) {
+                // TODO: implement me
+            }
+
             render() {
-                const headers = []
+                const headers = [];
+                const searchRow = !this.state.search ? null : (
+                    <tr onChange={this.search}>
+                        {this.props.headers.map((_, idx) => (
+                            <td key={idx}>
+                                <input type="text" data-idx={idx} />
+                            </td>
+                        ))}
+                    </tr>
+                );
                 return (
-                    <table>
-                        <thead>
-                            <tr onClick={this.sort}>
-                                {this.props.headers.map((title, idx) => {
-                                    if (this.state.sortby === idx) {
-                                        title += this.state.descending ? ' \u2191' : ' \u2193'
-                                    }
-                                    return <th key={idx}>{title}</th>
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody onDoubleClick={this.showEditor}>
-                            {this.state.data.map((row, rowidx) => (
-                                <tr key={rowidx} data-row={rowidx}>
-                                    {row.map((cell, columnidx) => {
-                                        const edit = this.state.edit;
-                                        if (edit && edit.row === rowidx && edit.column === columnidx) {
-                                            cell = (
-                                                <form onSubmit={this.save}>
-                                                    <input type="text" defaultValue={cell} />
-                                                </form>
-                                            );
+                    <div>
+                        <div className="toolbar">
+                            <button onClick={this.toggleSearch}>
+                                {this.state.search ? 'Hide search' : 'Show search'}
+                            </button>
+                            <a href="data.json" onClick={this.downloadJSON}>
+                                Export JSON
+                            </a>
+                            <a href="data.csv" onClick={this.downloadCSV}>
+                                Export CSV
+                            </a>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr onClick={this.sort}>
+                                    {this.props.headers.map((title, idx) => {
+                                        if (this.state.sortby === idx) {
+                                            title += this.state.descending ? ' \u2191' : ' \u2193'
                                         }
-                                        return <td key={columnidx}> {cell}</td>
+                                        return <th key={idx}>{title}</th>
                                     })}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+
+                            <tbody onDoubleClick={this.showEditor}>
+                                {searchRow}
+                                {this.state.data.map((row, rowidx) => {
+                                    const recordId = row[row.length - 1];
+
+                                    return (
+                                        <tr key={recordId} data-row={recordId}>
+                                            {row.map((cell, columnidx) => {
+                                                if (columnidx === this.props.headers.length) {
+                                                    // do not show the record ID in the table UI
+                                                    return;
+                                                }
+                                                const edit = this.state.edit;
+                                                if (
+                                                    edit &&
+                                                    edit.row === recordId &&
+                                                    edit.column === columnidx
+                                                ) {
+                                                    cell = (
+                                                        <form onSubmit={this.save}>
+                                                            <input type="text" defaultValue={cell} />
+                                                        </form>
+                                                    );
+                                                }
+                                                return <td key={columnidx}>{cell}</td>;
+                                            })}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+
+                    </div>
                 )
             }
         }
