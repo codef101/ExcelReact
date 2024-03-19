@@ -205,7 +205,28 @@
             }
 
             download(format, ev) {
-                // TODO: implement me
+                const data = clone(this.state.data).map(row => {
+                    row.pop(); // drop the last column, the recordId
+                    return row;
+                });
+                const contents =
+                    format === 'json'
+                        ? JSON.stringify(data, null, ' ')
+                        : data.reduce((result, row) => {
+                            return (
+                                result +
+                                row.reduce((rowcontent, cellcontent, idx) => {
+                                    const cell = cellcontent.replace(/"/g, '""');
+                                    const delimiter = idx < row.length - 1 ? ',' : '';
+                                    return `${rowcontent}"${cellcontent}"${delimiter}`;
+                                }, '') +
+                                '\n'
+                            );
+                        }, '');
+                const URL = window.URL || window.webkitURL;
+                const blob = new Blob([contents], { type: 'text/' + format });
+                ev.target.href = URL.createObjectURL(blob);
+                ev.target.download = 'data.' + format;
             }
 
             render() {
